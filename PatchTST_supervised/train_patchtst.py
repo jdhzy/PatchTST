@@ -1,0 +1,49 @@
+import os
+import subprocess
+
+def train_patchtst(
+    root_path='../../../../forecast/model_data/',
+    data_path='hawaii_sample_40.csv',
+    model_id='hawaii_allstations_720_2160',
+    seq_len=720,  # 30 days
+    label_len=168,
+    pred_len=720,
+    patch_len=24,
+    stride=12,
+    d_model=64,
+    e_layers=2,
+    features='M',
+    target='WVHT',
+    train_epochs=5,
+    itr=1
+):
+    cmd = [
+        'python', 'run_longExp.py',
+        '--is_training', '1',
+        '--root_path', root_path,
+        '--data_path', data_path,
+        '--model_id', f'{model_id}_{seq_len}_{pred_len}',
+        '--model', 'PatchTST',
+        '--data', 'custom',
+        '--features', features,
+        '--target', target,
+        '--seq_len', str(seq_len),
+        '--label_len', str(label_len),
+        '--pred_len', str(pred_len),
+        '--patch_len', str(patch_len),
+        '--stride', str(stride),
+        '--e_layers', str(e_layers),
+        '--d_model', str(d_model),
+        '--train_epochs', str(train_epochs),
+        '--des', 'exp_hawaii_full',
+        '--itr', str(itr),
+        '--loss', 'mse',
+        '--dropout', '0.05',
+        '--lradj', 'type3'
+    ]
+
+    print("🚀 Running command:\n", " ".join(cmd))
+    subprocess.run(cmd)
+
+if __name__ == "__main__":
+    train_patchtst()

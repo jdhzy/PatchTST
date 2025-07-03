@@ -100,14 +100,33 @@ if __name__ == '__main__':
     torch.manual_seed(fix_seed)
     np.random.seed(fix_seed)
 
+    ##################original code##################
+    # if torch.backends.mps.is_available() and torch.backends.mps.is_built():
+    #     args.device = torch.device("mps")
+    #     print("Using Apple Metal (MPS) backend")
+    # else:
+    #     args.device = torch.device("cpu")
+    #     print("Using CPU (MPS not available or not built)")
 
-    args.use_gpu = True if torch.cuda.is_available() and args.use_gpu else False
+    # if args.use_gpu and args.use_multi_gpu:
+    #     args.devices = args.devices.replace(' ', '')
+    #     device_ids = args.devices.split(',')
+    #     args.device_ids = [int(id_) for id_ in device_ids]
+    #     args.gpu = args.device_ids[0]
+    #######################################################
+    if torch.backends.mps.is_available() and torch.backends.mps.is_built():
+        device = torch.device("mps")
+        print("Using Apple Metal (MPS) backend")
+        args.use_gpu = False  # Prevent CUDA fallback
+    elif torch.cuda.is_available():
+        device = torch.device(f"cuda:{args.gpu}")
+        print(f"Using CUDA GPU: cuda:{args.gpu}")
+    else:
+        device = torch.device("cpu")
+        print("Using CPU (no GPU or MPS available)")
+        args.use_gpu = False
 
-    if args.use_gpu and args.use_multi_gpu:
-        args.dvices = args.devices.replace(' ', '')
-        device_ids = args.devices.split(',')
-        args.device_ids = [int(id_) for id_ in device_ids]
-        args.gpu = args.device_ids[0]
+    args.device = device
 
     print('Args in experiment:')
     print(args)
