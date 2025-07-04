@@ -3,11 +3,11 @@ import subprocess
 
 def train_patchtst(
     root_path='../../../../forecast/model_data/',
-    data_path='hawaii_sample_40.csv',
-    model_id='hawaii_allstations_720_2160',
-    seq_len=720,  # 30 days
-    label_len=168,
-    pred_len=720,
+    data_path='hawaii_sample_60.csv',
+    model_id='hawaii_allstations_1440_2160',
+    seq_len=1440,  # 60 days
+    label_len=336,
+    pred_len=2160,
     patch_len=24,
     stride=12,
     d_model=64,
