@@ -98,6 +98,7 @@ class Exp_Main(Exp_Basic):
         return total_loss
 
     def train(self, setting):
+        print(f"[train] Starting training for setting: {setting}")
         train_data, train_loader = self._get_data(flag='train')
         vali_data, vali_loader = self._get_data(flag='val')
         test_data, test_loader = self._get_data(flag='test')
@@ -106,8 +107,17 @@ class Exp_Main(Exp_Basic):
         if not os.path.exists(path):
             os.makedirs(path)
 
-        time_now = time.time()
+        # Build full checkpoint filename based on experiment settings
+        resume_dir = os.path.join(self.args.checkpoints, setting)  # `setting` is the folder name
+        resume_path = os.path.join(resume_dir, 'checkpoint.pth')   # actual file
 
+
+        if os.path.exists(resume_path):
+            print(f"Found checkpoint to resume: {resume_path}")
+        else:
+            print(f"No checkpoint found at: {resume_path}")
+
+        time_now = time.time()
         train_steps = len(train_loader)
         early_stopping = EarlyStopping(patience=self.args.patience, verbose=True)
 
@@ -116,14 +126,28 @@ class Exp_Main(Exp_Basic):
 
         if self.args.use_amp:
             scaler = torch.cuda.amp.GradScaler()
+
+        start_epoch = 0
+        if self.args.resume and os.path.exists(resume_path):
+            print(f"Resuming from: {resume_path}")
+            checkpoint = torch.load(resume_path, map_location=self.device)
+            self.model.load_state_dict(checkpoint['model'])
+            model_optim.load_state_dict(checkpoint['optimizer'])
+            start_epoch = checkpoint['epoch'] + 1
+            if self.args.use_amp and 'scaler' in checkpoint:
+                scaler.load_state_dict(checkpoint['scaler'])
+        else:
+            print(f"No checkpoint found at: {resume_path}")
+            start_epoch = 0
             
         scheduler = lr_scheduler.OneCycleLR(optimizer = model_optim,
                                             steps_per_epoch = train_steps,
                                             pct_start = self.args.pct_start,
                                             epochs = self.args.train_epochs,
                                             max_lr = self.args.learning_rate)
-
-        for epoch in range(self.args.train_epochs):
+        
+        #for epoch in range(self.args.train_epochs):
+        for epoch in range(start_epoch, self.args.train_epochs):
             iter_count = 0
             train_loss = []
 
@@ -201,6 +225,19 @@ class Exp_Main(Exp_Basic):
 
             print("Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Test Loss: {4:.7f}".format(
                 epoch + 1, train_steps, train_loss, vali_loss, test_loss))
+            
+            ###########added#######
+            # Save resume checkpoint
+            checkpoint = {
+                'epoch': epoch,
+                'model': self.model.state_dict(),
+                'optimizer': model_optim.state_dict()
+            }
+            if self.args.use_amp:
+                checkpoint['scaler'] = scaler.state_dict()
+            torch.save(checkpoint, resume_path)
+            ###########################
+
             early_stopping(vali_loss, self.model, path)
             if early_stopping.early_stop:
                 print("Early stopping")
@@ -211,16 +248,24 @@ class Exp_Main(Exp_Basic):
             else:
                 print('Updating learning rate to {}'.format(scheduler.get_last_lr()[0]))
 
-        best_model_path = path + '/' + 'checkpoint.pth'
-        self.model.load_state_dict(torch.load(best_model_path))
+        # best_model_path = path + '/' + 'checkpoint.pth'
+        # self.model.load_state_dict(torch.load(best_model_path))
+
+        ##########added#########
+        setting_path = os.path.join(self.args.checkpoints, setting)
+        best_model_path = os.path.join(setting_path, 'checkpoint.pth')
+        checkpoint = torch.load(best_model_path, map_location=self.device)
+        self.model.load_state_dict(checkpoint['model'])
+        ##########################
 
         return self.model
 
     def test(self, setting, test=0):
+        print(f"[test] Starting test for setting: {setting}")
         test_data, test_loader = self._get_data(flag='test')
-        
+
         if test:
-            print('loading model')
+            print('[test] Loading model checkpoint...')
             self.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
 
         preds = []
@@ -233,84 +278,99 @@ class Exp_Main(Exp_Basic):
         self.model.eval()
         with torch.no_grad():
             for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(test_loader):
+
+                if i == 200:
+                    print("[debug] Early exit test after 200 batches")
+                    break
+
+                if i % 50 == 0:
+                    print(f"[test] Processing batch {i+1}/{len(test_loader)}")
+
                 batch_x = batch_x.float().to(self.device)
                 batch_y = batch_y.float().to(self.device)
-
                 batch_x_mark = batch_x_mark.float().to(self.device)
                 batch_y_mark = batch_y_mark.float().to(self.device)
 
                 # decoder input
                 dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
                 dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
-                # encoder - decoder
-                if self.args.use_amp:
-                    with torch.cuda.amp.autocast():
-                        if 'Linear' in self.args.model or 'TST' in self.args.model:
+
+                # === MODEL FORWARD ===
+                outputs = None
+                try:
+                    if self.args.use_amp:
+                        with torch.cuda.amp.autocast():
+                            if 'TST' in self.args.model or 'Linear' in self.args.model:
+                                outputs = self.model(batch_x)
+                            else:
+                                if self.args.output_attention:
+                                    outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+                                else:
+                                    outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                    else:
+                        if 'TST' in self.args.model or 'Linear' in self.args.model:
                             outputs = self.model(batch_x)
                         else:
                             if self.args.output_attention:
                                 outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
                             else:
                                 outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
-                else:
-                    if 'Linear' in self.args.model or 'TST' in self.args.model:
-                            outputs = self.model(batch_x)
-                    else:
-                        if self.args.output_attention:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+                except Exception as e:
+                    print(f"[error] Exception during model forward pass: {e}")
+                    raise
 
-                        else:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                if outputs is None:
+                    raise RuntimeError("[error] Model output was not generated. Check model type or AMP configuration.")
 
                 f_dim = -1 if self.args.features == 'MS' else 0
-                # print(outputs.shape,batch_y.shape)
                 outputs = outputs[:, -self.args.pred_len:, f_dim:]
-                batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
-                outputs = outputs.detach().cpu().numpy()
-                batch_y = batch_y.detach().cpu().numpy()
-
-                pred = outputs  # outputs.detach().cpu().numpy()  # .squeeze()
-                true = batch_y  # batch_y.detach().cpu().numpy()  # .squeeze()
+                batch_y = batch_y[:, -self.args.pred_len:, f_dim:]
+                pred = outputs.detach().cpu().numpy()
+                true = batch_y.detach().cpu().numpy()
 
                 preds.append(pred)
                 trues.append(true)
                 inputx.append(batch_x.detach().cpu().numpy())
+
                 if i % 20 == 0:
-                    input = batch_x.detach().cpu().numpy()
-                    gt = np.concatenate((input[0, :, -1], true[0, :, -1]), axis=0)
-                    pd = np.concatenate((input[0, :, -1], pred[0, :, -1]), axis=0)
+                    input_np = batch_x.detach().cpu().numpy()
+                    gt = np.concatenate((input_np[0, :, -1], true[0, :, -1]), axis=0)
+                    pd = np.concatenate((input_np[0, :, -1], pred[0, :, -1]), axis=0)
                     visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'))
 
-        if self.args.test_flop:
-            test_params_flop((batch_x.shape[1],batch_x.shape[2]))
-            exit()
+        # Debug memory size
+        import sys
+        print(f"[debug] Approx preds size in MB: {sum(sys.getsizeof(p) for p in preds)/1e6:.2f} MB")
+
+        # Convert to numpy
         preds = np.array(preds)
         trues = np.array(trues)
         inputx = np.array(inputx)
 
+        print("[debug] preds.shape:", preds.shape)
+        print("[debug] trues.shape:", trues.shape)
+        print("[debug] inputx.shape:", inputx.shape)
+
+        # Reshape
         preds = preds.reshape(-1, preds.shape[-2], preds.shape[-1])
         trues = trues.reshape(-1, trues.shape[-2], trues.shape[-1])
         inputx = inputx.reshape(-1, inputx.shape[-2], inputx.shape[-1])
 
-        # result save
-        folder_path = './results/' + setting + '/'
-        if not os.path.exists(folder_path):
-            os.makedirs(folder_path)
-
+        print("[test] Saving results...")
         mae, mse, rmse, mape, mspe, rse, corr = metric(preds, trues)
-        print('mse:{}, mae:{}, rse:{}'.format(mse, mae, rse))
-        f = open("result.txt", 'a')
-        f.write(setting + "  \n")
-        f.write('mse:{}, mae:{}, rse:{}'.format(mse, mae, rse))
-        f.write('\n')
-        f.write('\n')
-        f.close()
+        print(f"[test] mse:{mse}, mae:{mae}, rse:{rse}")
 
-        # np.save(folder_path + 'metrics.npy', np.array([mae, mse, rmse, mape, mspe,rse, corr]))
-        np.save(folder_path + 'pred.npy', preds)
-        # np.save(folder_path + 'true.npy', trues)
-        # np.save(folder_path + 'x.npy', inputx)
-        return
+        # Save summary to text
+        with open("result.txt", 'a') as f:
+            f.write(setting + "\n")
+            f.write(f"mse:{mse}, mae:{mae}, rse:{rse}\n\n")
+
+        # Save results
+        np.save(os.path.join(folder_path, 'pred.npy'), preds)
+        # np.save(os.path.join(folder_path, 'true.npy'), trues)
+        # np.save(os.path.join(folder_path, 'x.npy'), inputx)
+
+        print("[test] Finished test and saved results.")
 
     def predict(self, setting, load=False):
         pred_data, pred_loader = self._get_data(flag='pred')

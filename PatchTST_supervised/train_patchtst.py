@@ -1,11 +1,12 @@
 import os
 import subprocess
+import time
 
 def train_patchtst(
     root_path='../../../../forecast/model_data/',
     data_path='hawaii_sample_60.csv',
     model_id='hawaii_allstations_1440_2160',
-    seq_len=1440,  # 60 days
+    seq_len=1440,
     label_len=336,
     pred_len=2160,
     patch_len=24,
@@ -15,7 +16,11 @@ def train_patchtst(
     features='M',
     target='WVHT',
     train_epochs=5,
-    itr=1
+    itr=1,
+    resume=True,
+    checkpoints='./checkpoints/',
+    batch_size=128,
+    use_gpu=True
 ):
     cmd = [
         'python', 'run_longExp.py',
@@ -39,11 +44,20 @@ def train_patchtst(
         '--itr', str(itr),
         '--loss', 'mse',
         '--dropout', '0.05',
-        '--lradj', 'type3'
+        '--lradj', 'type3',
+        '--batch_size', str(batch_size),
+        '--checkpoints', checkpoints
     ]
 
-    print("🚀 Running command:\n", " ".join(cmd))
+    if resume:
+        cmd.append('--resume')
+    if not use_gpu:
+        cmd += ['--use_gpu', 'False']
+
+    print("Running command:\n", " ".join(cmd))
+    start = time.time()
     subprocess.run(cmd)
+    print(f"Finished in {time.time() - start:.2f} seconds")
 
 if __name__ == "__main__":
     train_patchtst()

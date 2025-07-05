@@ -84,6 +84,7 @@ if __name__ == '__main__':
     parser.add_argument('--lradj', type=str, default='type3', help='adjust learning rate')
     parser.add_argument('--pct_start', type=float, default=0.3, help='pct_start')
     parser.add_argument('--use_amp', action='store_true', help='use automatic mixed precision training', default=False)
+    parser.add_argument('--resume', action='store_true', help='resume training from last checkpoint') #added
 
     # GPU
     parser.add_argument('--use_gpu', type=bool, default=True, help='use gpu')
@@ -117,15 +118,15 @@ if __name__ == '__main__':
     if torch.backends.mps.is_available() and torch.backends.mps.is_built():
         device = torch.device("mps")
         print("Using Apple Metal (MPS) backend")
-        args.use_gpu = False  # Prevent CUDA fallback
+        args.use_gpu = True
     elif torch.cuda.is_available():
         device = torch.device(f"cuda:{args.gpu}")
         print(f"Using CUDA GPU: cuda:{args.gpu}")
+        args.use_gpu = True
     else:
         device = torch.device("cpu")
         print("Using CPU (no GPU or MPS available)")
         args.use_gpu = False
-
     args.device = device
 
     print('Args in experiment:')
