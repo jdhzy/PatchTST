@@ -1,3 +1,0 @@
-hawaii_allstations_1440_2160_1440_2160_PatchTST_custom_ftM_sl1440_ll336_pl2160_dm64_nh8_el2_dl1_df2048_fc1_ebtimeF_dtTrue_exp_hawaii_full_0
-mse:0.619433581829071, mae:0.5228713750839233, rse:0.7036728262901306
-

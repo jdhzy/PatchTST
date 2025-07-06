@@ -1,6 +1,7 @@
 import os
 import subprocess
 import time
+import multiprocessing
 
 def train_patchtst(
     root_path='../../../../forecast/model_data/',
@@ -20,7 +21,8 @@ def train_patchtst(
     resume=True,
     checkpoints='./checkpoints/',
     batch_size=128,
-    use_gpu=True
+    use_gpu=True,
+    num_workers=0  # <- your desired value
 ):
     cmd = [
         'python', 'run_longExp.py',
@@ -46,7 +48,8 @@ def train_patchtst(
         '--dropout', '0.05',
         '--lradj', 'type3',
         '--batch_size', str(batch_size),
-        '--checkpoints', checkpoints
+        '--checkpoints', checkpoints,
+        '--num_workers', str(num_workers) 
     ]
 
     if resume:
@@ -60,4 +63,5 @@ def train_patchtst(
     print(f"Finished in {time.time() - start:.2f} seconds")
 
 if __name__ == "__main__":
+    multiprocessing.set_start_method('spawn', force=True)
     train_patchtst()

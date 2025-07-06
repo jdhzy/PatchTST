@@ -261,6 +261,7 @@ class Exp_Main(Exp_Basic):
         return self.model
 
     def test(self, setting, test=0):
+        print("[Debug]Inside test()")
         print(f"[test] Starting test for setting: {setting}")
         test_data, test_loader = self._get_data(flag='test')
 
@@ -278,11 +279,6 @@ class Exp_Main(Exp_Basic):
         self.model.eval()
         with torch.no_grad():
             for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(test_loader):
-
-                if i == 200:
-                    print("[debug] Early exit test after 200 batches")
-                    break
-
                 if i % 50 == 0:
                     print(f"[test] Processing batch {i+1}/{len(test_loader)}")
 
@@ -366,11 +362,14 @@ class Exp_Main(Exp_Basic):
             f.write(f"mse:{mse}, mae:{mae}, rse:{rse}\n\n")
 
         # Save results
+        print("[Debug]Saving to folder:", folder_path)
+        print("[Debug]Prediction shape:", preds.shape)
+
         np.save(os.path.join(folder_path, 'pred.npy'), preds)
         # np.save(os.path.join(folder_path, 'true.npy'), trues)
         # np.save(os.path.join(folder_path, 'x.npy'), inputx)
-
         print("[test] Finished test and saved results.")
+
 
     def predict(self, setting, load=False):
         pred_data, pred_loader = self._get_data(flag='pred')

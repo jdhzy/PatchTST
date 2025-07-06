@@ -188,6 +188,7 @@ if __name__ == '__main__':
 
         exp = Exp(args)  # set experiments
         print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
+        print("[Debug]Calling test with setting:", setting)
         exp.test(setting, test=1)
         torch.cuda.empty_cache()
         
